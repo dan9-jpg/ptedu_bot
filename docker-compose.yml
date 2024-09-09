@@ -1,0 +1,73 @@
+services:
+
+  postgresql_master:
+    image: postgres
+    container_name: postgresql_master
+    restart: always
+    volumes:
+      - ./ms_edu_init/:/docker-entrypoint-initdb.d
+      - ./data/postgresql_master:/var/lib/postgresql/data
+      - ./data/postgresql_master_log:/var/log/postgresql
+    expose:
+    - ${DB_PORT}
+    environment:
+      POSTGRES_PASSWORD: ${DB_ROOT_PASSWORD}
+      POSTGRES_HOST_AUTH_METHOD: "scram-sha-256\nhost replication rep_slave 0.0.0.0/0 trust"
+      DB_USER: ${DB_USER}
+      DB_PASSWORD: ${DB_PASSWORD}
+      DB_DATABASE: ${DB_DATABASE}
+      DB_REPL_USER: ${DB_REPL_USER}
+      DB_REPL_PASSWORD: ${DB_REPL_PASSWORD}
+    command: "
+      -c logging_collector=on
+      -c log_directory=/var/log/postgresql
+      -c log_filename=postgresql.log
+      "
+
+  postgresql_slave:
+    image: postgres
+    container_name: postgresql_slave
+    restart: always
+    volumes:
+      - /data/postgresql_slave/:/var/lib/postgresql/data
+    expose:
+    - ${DB_REPL_PORT}
+    environment:
+      DB_ROOT_PASSWORD: ${DB_ROOT_PASSWORD}
+      DB_REPL_USER: ${DB_REPL_USER}
+      DB_HOST: ${DB_HOST}
+      DB_PORT: ${DB_PORT}
+    command: |
+      bash -c "
+      rm -rf /var/lib/postgresql/data/* && pg_basebackup --pgdata=/var/lib/postgresql/data -R -w -U $DB_REPL_USER --host=$DB_HOST --port=$DB_PORT
+      chown -R postgres:postgres /var/lib/postgresql/data && chmod 0700 /var/lib/postgresql/data
+      su postgres -c postgres
+      "
+    depends_on:
+     postgresql_master:
+      condition: service_started
+
+  tg_bot:
+    image: tg_bot
+    container_name: tg_bot
+    restart: always
+    volumes:
+      - ./data/postgresql_master_log:/var/log/postgresql/
+    environment:
+      TOKEN: ${TOKEN}
+      RM_HOST: ${RM_HOST}
+      RM_PORT: ${RM_PORT}
+      RM_USER: ${RM_USER}
+      RM_PASSWORD: ${RM_PASSWORD}
+      DB_USER: ${DB_USER}
+      DB_PASSWORD: ${DB_PASSWORD}
+      DB_HOST: ${DB_HOST}
+      DB_PORT: ${DB_PORT}
+      DB_DATABASE: ${DB_DATABASE}
+      DB_REPL_USER: ${DB_REPL_USER}
+      DB_REPL_PASSWORD: ${DB_REPL_PASSWORD}
+      DB_REPL_HOST: ${DB_REPL_HOST}
+      DB_REPL_PORT: ${DB_REPL_PORT}
+    depends_on:
+     postgresql_slave:
+      condition: service_started
