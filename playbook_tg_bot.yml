@@ -1,0 +1,112 @@
+- name: pgs
+  hosts: pgmaster, pgslave
+  become: yes
+  vars_files:
+    - variables.yml
+  tasks:
+    - name: update apt
+      apt:
+        update_cache: yes
+    - name: install postgres
+      apt:
+        name: postgresql-14
+        state: latest
+
+- hosts: pgmaster
+  become: true
+  vars_files:
+    - variables.yml
+  tasks:
+    - name: create user for bot
+      shell: |
+        sudo -u postgres psql -c "CREATE USER {{ DB_USER }} WITH PASSWORD '{{ DB_PASSWORD }}';"
+    - name: create db and tables for bot
+      shell: |
+        sudo -u postgres psql -c "create database {{ DB_DATABASE }} with owner {{ DB_USER }};"
+        sudo -u postgres psql -d {{ DB_DATABASE }} -c "create table user_emails(id serial primary key, email varchar(256) not null);"
+        sudo -u postgres psql -d {{ DB_DATABASE }} -c "ALTER TABLE user_emails OWNER TO {{ DB_USER }};"
+        sudo -u postgres psql -d {{ DB_DATABASE }} -c "create table user_phones(id serial primary key, phone varchar(256) not null);"
+        sudo -u postgres psql -d {{ DB_DATABASE }} -c "ALTER TABLE user_phones OWNER TO {{ DB_USER }};"
+    - name: create user for repl
+      shell: |
+        sudo -u postgres psql -d {{ DB_DATABASE }} -c "CREATE USER {{ DB_REPL_USER }} REPLICATION LOGIN ENCRYPTED PASSWORD '{{ DB_REPL_PASSWORD }}';"
+    - name: update pg-hba and configuration
+      shell: |
+        echo 'host replication {{ DB_REPL_USER }} 0.0.0.0/0 trust' >> /etc/postgresql/14/main/pg_hba.conf
+        echo 'host {{ DB_DATABASE }} {{ DB_USER }} 0.0.0.0/0 scram-sha-256' >> /etc/postgresql/14/main/pg_hba.conf
+        echo "listen_addresses = '*'" >> /etc/postgresql/14/main/postgresql.conf
+    - name: restart postgres
+      shell: |
+         sudo systemctl restart postgresql.service
+- hosts: pgslave
+  become: true
+  vars_files:
+    - variables.yml
+  tasks:
+    - name: stop postgres
+      shell: |
+        sudo systemctl stop postgresql
+    - name: start repl
+      shell: |
+        rm -rf /var/lib/postgresql/14/main/ && pg_basebackup --pgdata=/var/lib/postgresql/14/main -R -w -U {{ DB_REPL_USER }} --host={{ DB_HOST }} --port={{ DB_PORT }}
+        echo "listen_addresses = '*'" >> /etc/postgresql/14/main/postgresql.conf
+        echo 'host {{ DB_DATABASE }} {{ DB_USER }} 0.0.0.0/0 scram-sha-256' >> /etc/postgresql/14/main/pg_hba.conf
+        chown -R postgres:postgres /var/lib/postgresql/14/main/ && chmod 0700 /var/lib/postgresql/14/main/
+    - name: start postgres
+      shell: |
+         sudo systemctl start postgresql
+- hosts: bot
+  become: true
+  vars_files:
+    - variables.yml
+  tasks:
+    - name: update apt
+      apt:
+        update_cache: yes
+    - name: install python
+      apt:
+        name: python3
+        state: latest
+    - name: install pip
+      apt:
+        name: python3-pip
+        state: latest
+    - name: Creates directory
+      file:
+        path: /opt/tg_bot
+        state: directory
+    - name: download bot
+      get_url:
+        url: "https://raw.githubusercontent.com/dan9-jpg/ptedu_bot/docker/bot/bot.py"
+        dest: "/opt/tg_bot/bot.py"
+        mode: '0755'
+    - name: download bot_req
+      get_url:
+        url: "https://raw.githubusercontent.com/dan9-jpg/ptedu_bot/docker/bot/requirements.txt"
+        dest: "/opt/tg_bot/requirements.txt"
+        mode: '0755'
+    - name: install requirements
+      pip:
+        requirements: /opt/tg_bot/requirements.txt
+    - name: copy key for monitoring
+      copy:
+        src: ~/.ssh/id_rsa
+        dest: ~/.ssh/id_rsa
+        mode: '0600'
+    - name: run script
+      shell:
+        cmd: python3 /opt/tg_bot/bot.py &
+      environment:
+        TOKEN: "6866467300:AAFNs2geTaLK5Y9MWqAiM7GVNxT8mTOwPoI"
+        RM_HOST: "{{ RM_HOST }}"
+        RM_PORT: "{{ RM_PORT }}"
+        RM_USER: "{{ RM_USER }}"
+        RM_PASSWORD: "{{ RM_PASSWORD }}"
+        DB_USER: "{{ DB_USER }}"
+        DB_PASSWORD: "{{ DB_PASSWORD }}"
+        DB_HOST: "{{ DB_HOST }}"
+        DB_PORT: "{{ DB_PORT }}"
+        DB_DATABASE: "{{ DB_DATABASE }}"
+        DB_REPL_HOST: "192.168.3.16"
+        DB_REPL_PORT: "5432"
+

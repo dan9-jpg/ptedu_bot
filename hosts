@@ -1,0 +1,3 @@
+bot  ansible_host=192.168.3.14 ansible_user=daniil ansible_port=22 ansible_ssh_private_key_file=/home/daniil/.ssh/id_rsa 
+pgmaster ansible_host=192.168.3.18 ansible_user=daniil ansible_port=22 ansible_ssh_private_key_file=/home/daniil/.ssh/id_rsa
+pgslave  ansible_host=192.168.3.17 ansible_user=daniil ansible_port=22 ansible_ssh_private_key_file=/home/daniil/.ssh/id_rsa
