@@ -97,7 +97,7 @@
       shell:
         cmd: python3 /opt/tg_bot/bot.py &
       environment:
-        TOKEN: "6866467300:AAFNs2geTaLK5Y9MWqAiM7GVNxT8mTOwPoI"
+        TOKEN: "{{ TOKEN }}"
         RM_HOST: "{{ RM_HOST }}"
         RM_PORT: "{{ RM_PORT }}"
         RM_USER: "{{ RM_USER }}"
